@@ -149,7 +149,7 @@ def setup(
 
     fabric.launch()
 
-    fabric.print(pprint.pformat(hparams))
+    print(pprint.pformat(hparams))
     if logger_name in ("tensorboard", "wandb"):
         fabric.logger.log_hyperparams(hparams)
 
@@ -203,8 +203,8 @@ def main(
     if train.max_seq_length:
         model.max_seq_length = train.max_seq_length
 
-    fabric.print(f"Time to instantiate model: {time.perf_counter() - t0:.02f} seconds.")
-    fabric.print(f"Total parameters: {num_parameters(model):,}")
+    print(f"Time to instantiate model: {time.perf_counter() - t0:.02f} seconds.")
+    print(f"Total parameters: {num_parameters(model):,}")
 
     model = torch.compile(model)
     model = fabric.setup(model)
@@ -229,7 +229,7 @@ def main(
 
     resume = find_resume_path(resume, out_dir)
     if resume:
-        fabric.print(f"Resuming training from {resume}")
+        print(f"Resuming training from {resume}")
         fabric.load(resume, state)
 
     train_time = time.perf_counter()
@@ -238,9 +238,9 @@ def main(
     # Save final checkpoint
     save_checkpoint(fabric, state, tokenizer_dir, out_dir / "final" / "lit_model.pth")
 
-    fabric.print(f"Training time: {(time.perf_counter()-train_time):.2f}s")
+    print(f"Training time: {(time.perf_counter()-train_time):.2f}s")
     if fabric.device.type == "cuda":
-        fabric.print(f"Memory used: {torch.cuda.max_memory_allocated() / 1e9:.02f} GB")
+        print(f"Memory used: {torch.cuda.max_memory_allocated() / 1e9:.02f} GB")
 
 
 def fit(
@@ -261,7 +261,7 @@ def fit(
         val_loss = validate(fabric, model, val_dataloader, max_iters=eval.max_iters)
         val_loss = f"{val_loss:.3f}"
     else:
-        fabric.print("Verifying settings ...")
+        print("Verifying settings ...")
         validate(fabric, model, val_dataloader, max_iters=2, verbose=False)   # sanity check
         val_loss = "n/a"
 
@@ -273,7 +273,7 @@ def fit(
         model_fwd = lambda: meta_model(x)
         model_loss = lambda y: chunked_cross_entropy(y, x, chunk_size=0)
         measured_flops = measure_flops(meta_model, model_fwd, model_loss)
-        fabric.print(f"Measured TFLOPs: {measured_flops * fabric.world_size / 1e12:.2f}")
+        print(f"Measured TFLOPs: {measured_flops * fabric.world_size / 1e12:.2f}")
         del meta_model, x
 
     max_tokens_per_device = train.max_tokens // fabric.world_size
@@ -345,15 +345,6 @@ def fit(
             }
             if isinstance(val_loss, float):
                 val_loss = f"{val_loss:.3f}"
-            fabric.print(
-                f"Epoch {metrics['epoch']+1} | iter {metrics['iter']} step {metrics['step']} |"
-                f" loss train: {metrics['loss']:.3f},"
-                f" val: {val_loss} |"
-                f" iter time: {metrics['iter_time'] * 1000:.2f} ms"
-                f"{' (step)' if not is_accumulating else ''}"
-                f" remaining time: {timedelta(seconds=int(metrics['remaining_time']))!s}"
-            )
-
             print(
                 f"Epoch {metrics['epoch']+1} | iter {metrics['iter']} step {metrics['step']} |"
                 f" loss train: {metrics['loss']:.3f},"
@@ -373,7 +364,7 @@ def fit(
             val_loss = val_loss.item()
             td = time.perf_counter() - t0
 
-            fabric.print(f"iter {state['iter_num']}: val loss {val_loss:.4f}, val time: {td * 1000:.2f} ms")
+            print(f"iter {state['iter_num']}: val loss {val_loss:.4f}, val time: {td * 1000:.2f} ms")
             metrics = {"val_loss": val_loss, "val_ppl": math.exp(val_loss)}
             fabric.log_dict(metrics, step=state["iter_num"] - 1)
             fabric.barrier()
@@ -386,14 +377,14 @@ def fit(
         val_loss = validate(fabric, model, val_dataloader, max_iters=eval.max_iters)
         metrics = {"val_loss": val_loss, "val_ppl": math.exp(val_loss)}
         fabric.log_dict(metrics, step=state["iter_num"])
-        fabric.print(f"Final evaluation | val loss: {val_loss.item():.3f} | val ppl: {math.exp(val_loss):.3f}")
+        print(f"Final evaluation | val loss: {val_loss.item():.3f} | val ppl: {math.exp(val_loss):.3f}")
 
 
 @torch.no_grad()
 def validate(fabric: L.Fabric, model: nn.Module, val_dataloader: DataLoader, max_iters: int, verbose: bool = True) -> torch.Tensor:
     fabric.barrier()
     if verbose:
-        fabric.print("Validating ...")
+        print("Validating ...")
     model.eval()
 
     losses = []
@@ -464,7 +455,7 @@ def initialize_weights(fabric: L.Fabric, model: GPT, n_layer: int, n_embd: int) 
 def save_checkpoint(fabric, state, tokenizer_dir, checkpoint_file):
     model = state["model"]
     checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
-    fabric.print(f"Saving checkpoint to {str(checkpoint_file)!r}")
+    print(f"Saving checkpoint to {str(checkpoint_file)!r}")
     fabric.save(checkpoint_file, state)
     if fabric.global_rank == 0:
         save_hyperparameters(setup, checkpoint_file.parent)
